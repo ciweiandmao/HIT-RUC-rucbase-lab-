@@ -1,0 +1,87 @@
+/**
+ * Creates a new page in the buffer pool. 相当于从磁盘中移动一个新建的空page到缓冲池某个位置
+ * @param[out] page_id id of created page
+ * @return nullptr if no new pages could be created, otherwise pointer to new page
+ */
+Page *BufferPoolManager::NewPage(PageId *page_id) {
+     std::lock_guard<std::mutex> latch_guard(latch_);
+      latch_.lock();
+  // 0.
+  page_id_t new_page_id = disk_manager_->AllocatePage(page_id->fd);
+  // 1.
+  bool is_all = true;
+  for (int i = 0; i < static_cast<int>(pool_size_); i++) {
+    if (pages_[i].pin_count_ == 0) {
+      is_all = false;
+      break;
+    }
+  }
+  if (is_all) {
+    latch_.unlock();
+    return nullptr;
+  }
+  // 2.
+  frame_id_t victim_fid;
+  bool fuck=false;
+  if (!free_list_.empty()) {
+    victim_fid = free_list_.front();
+    free_list_.pop_front();
+    fuck=true;
+  }
+  if (replacer_->Victim(&victim_fid)) {
+    // Remove entry from page_table
+    int replace_frame_id = -1;
+    for (const auto &p : page_table_) {
+      page_id_t pid = p.first.page_no;
+      frame_id_t fid = p.second;
+      if (fid == victim_fid) {
+        replace_frame_id = pid;
+        break;
+      }
+    }
+    if (replace_frame_id != -1) {
+      Page *replace_page = &pages_[victim_fid];
+
+      // If dirty, flush to disk
+      if (replace_page->is_dirty_) {
+        char *data = pages_[page_table_[replace_page->id_]].data_;
+        disk_manager_->write_page(replace_page->id_.fd,replace_page->id_.page_no, data,PAGE_SIZE);
+        replace_page->pin_count_ = 0;  // Reset pin_count
+      }
+      page_table_.erase(replace_page->id_);
+    }
+
+    fuck=true;
+  }
+  if (!fuck) {
+    latch_.unlock();
+    return nullptr;
+ }
+  // 3.
+  Page *victim_page = &pages_[victim_fid];
+  victim_page->id_.fd = new_page_id;
+  victim_page->pin_count_++;
+  replacer_->Pin(victim_fid);
+  page_table_[*page_id] = victim_fid;
+  victim_page->is_dirty_ = false;
+  page_id->fd = new_page_id;
+  // [attention]
+  // if this not write to disk directly
+  // maybe meet below case:
+  // 1. NewPage
+  // 2. unpin(false)
+  // 3. 由于其他页的操作导致该页被从buffer_pool中移除
+  // 4. 这个时候在FetchPage， 就拿不到这个page了。
+  // 所以这里先把它写回磁盘
+  disk_manager_->write_page(victim_page->id_.fd,victim_page->id_.page_no, victim_page->data_,PAGE_SIZE);
+  latch_.unlock();
+  return victim_page;
+
+    // Todo:
+    // 0.   lock latch
+    // 1.   Make sure you call DiskManager::AllocatePage!
+    // 2.   If all the pages in the buffer pool are pinned, return nullptr.
+    // 3.   Pick a victim page P from either the free list or the replacer. Always pick from the free list first.
+    // 4.   Update P's metadata, zero out memory and add P to the page table. pin_count set to 1.
+    // 5.   Set the page ID output parameter. Return a pointer to P.
+}
