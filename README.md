@@ -6,7 +6,7 @@
 
 更多参考：
 
-https://github.com/tyc404/rucbaseHIT
+https://github.com/tyc404/rucbaseHIT  （这个人写完了旧版Lab3和Lab4）
 
 https://github.com/Shawn-Yang-Xiao/RUCBASE_lab
 
