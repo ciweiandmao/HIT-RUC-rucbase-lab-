@@ -10,7 +10,7 @@ https://github.com/tyc404/rucbaseHIT  （这个人写完了旧版Lab3和Lab4）
 
 https://github.com/Shawn-Yang-Xiao/RUCBASE_lab
 
-讲讲我的故事
+23.11.11 讲讲我的故事
 这门课在我们学校是数据库概论，是大二的必修课，
 而这门课在哈工大是大三的课，叫数据库系统
 （就这样两门课之间已经隔了一层可悲的厚障壁了）
